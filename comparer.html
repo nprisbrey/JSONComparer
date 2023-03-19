@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Packet Comparer</title>
+	<style>
+		#comparisonSettings {
+			display:flex;
+			flex-direction:row;
+			justify-content:space-evenly;
+			align-items:flex-start;
+		}
+		#comparisonSettings div {
+			width:100%;
+			text-align:center;
+		}
+		#header {
+			text-align:center;
+		}
+		#j1KeysTitle, #j1Keys, #j2KeysTitle, #j2Keys {
+			display:none;
+		}
+		#loadFiles {
+			background-color:transparent;
+			color:darkorange;
+			border-color:darkorange;
+			border-style:solid;
+			font-size:xx-large;
+			border-radius:10px;
+			transition-duration:0.5s;
+		}
+		#loadFiles:hover {
+			background-color:darkorange;
+			color:white;
+		}
+		.green {
+			background-color:#80dca9;
+			display:flex;
+			justify-content:space-evenly;
+		}
+		.key {
+			border:2px solid cornflowerblue;
+			border-radius:10px;
+			background-color:cornflowerblue;
+			font-size:large;
+			padding:0;
+			margin:2px;
+			transition-duration:0.5s;
+		}
+		.key:hover {
+			color:cornflowerblue;
+			background-color:transparent;
+		}
+		.left, .right {
+			width:50%;
+			padding-left:20px;
+			background-image:linear-gradient(to left, transparent 97%, grey 99%);
+			background-clip:padding-box;
+			overflow-wrap:anywhere;
+			position:relative;
+		}
+		.left:hover .remove, .right:hover .remove {
+			opacity:1;
+		}
+		.red {
+			background-color:#ffa38a;
+			display:flex;
+			justify-content:space-evenly;
+		}
+		.remove {
+			position:absolute;
+			left:0;
+			bottom:0;
+			top:0;
+			width:20px;
+			padding:0;
+			transition-duration:0.5s;
+			opacity:0;
+			border:2px solid red;
+			border-radius:6px;
+			background-color:white;
+		}
+		.remove p {
+			position:absolute;
+			top:6px;
+			bottom:0;
+			left:0;
+			right:0;
+			line-height:0;
+			font-weight:bolder;
+			font-size:x-large;
+			color:red;
+		}
+		.yellow {
+			background-color:#ffff0094;
+			display:flex;
+			justify-content:space-evenly;
+		}
+		.key p {
+			margin:5px;
+		}
+		p {
+			margin-top:5px;
+			margin-bottom:5px;
+		}
+	</style>
+	<script>
+		const INDENTATION = 30;
+		var fr1 = new FileReader();
+		var fr2 = new FileReader();
+		var j1, j2;
+		
+		// Get HTML code for only one side of the comparison
+		function getHtmlCode(val, indent, element, jsonStr) {
+			var elementStr = getArrayStr(element);
+			if (Array.isArray(val) && val.length) {
+				if (!element.length || isPosInt(element[element.length - 1])) {
+					var htmlCode = "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>[</p>";
+				} else {
+					var htmlCode = "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": [</p>";
+				}
+				for (var i in val) {
+					htmlCode += getHtmlCode(val[i], indent + INDENTATION, element.concat(i), jsonStr);
+				}
+				htmlCode += "<p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>]</p>";
+				return htmlCode;
+			} else if (typeof(val) === "object" && val !== null && Object.keys(val).length) {
+				if (!element.length || isPosInt(element[element.length - 1])) {
+					var htmlCode = "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>{</p>";
+				} else {
+					var htmlCode = "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": {</p>";
+				}
+				for (var [key, value] of Object.entries(val)) {
+					htmlCode += getHtmlCode(value, indent + INDENTATION, element.concat(key), jsonStr);
+				}
+				htmlCode += "<p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>}</p>";
+				return htmlCode;
+			} else {
+				if (Array.isArray(val) && !val.length) {
+					if (!element.length) {
+						return "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>[]</p>";
+					}
+					return "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": []</p>";
+				} else if (typeof(val) === 'object' && val !== null && !Object.keys(val).length) {
+					if (!element.length) {
+						return "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>{}</p>";
+					}
+					return "<button class='remove' onclick='removeElement(" + jsonStr + "," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": {}</p>";
+				}
+				return "<p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": " + str(val) + "</p>";
+			}
+		}
+		
+		// Return a list with the same structure as list1 giving the color the key should be in
+		function listHtml(list1, list2, element, indent) {
+			var htmlCode;
+			if (JSON.stringify(list1) === JSON.stringify(list2)) {
+				htmlCode = "<div class='green'><div class='left'>" + getHtmlCode(list1, indent, element, "j1") + "</div><div class='right'>" + getHtmlCode(list2, indent, element, "j2") + "</div></div>";
+			} else {
+				var elementStr = getArrayStr(element);
+				if (!element.length || isPosInt(element[element.length - 1])) {
+					htmlCode = "<div class='green'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>[</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>[</p></div></div>";
+				} else {
+					htmlCode = "<div class='green'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": [</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": [</p></div></div>";
+				}
+				for (var i = 0; i < list1.length || i < list2.length; ++i) {
+					if (i >= list1.length) {
+						htmlCode += "<div class='red'><div class='left'></div><div class='right'>";
+						htmlCode += getHtmlCode(list2[i], indent + INDENTATION, element.concat(i), "j2");
+						htmlCode += "</div></div>";
+					} else if (i >= list2.length) {
+						htmlCode += "<div class='red'><div class='left'>";
+						htmlCode += getHtmlCode(list1[i], indent + INDENTATION, element.concat(i), "j1");
+						htmlCode += "</div><div class='right'></div></div>";
+					} else {
+						if (Array.isArray(list1[i]) && Array.isArray(list2[i]) && (list1[i].length || list2[i].length)) {
+							htmlCode += listHtml(list1[i], list2[i], element.concat(i), indent + INDENTATION);
+						} else if (typeof(list1[i]) === "object" && list1[i] !== null && typeof(list2[i]) === "object" && list2[i] !== null && (Object.keys(list1[i]).length || Object.keys(list2[i]).length)) {
+							htmlCode += objHtml(list1[i], list2[i], element.concat(i), indent + INDENTATION);
+						} else {
+							if (list1[i] === list2[i] || (typeof(list1[i]) === 'object' && typeof(list2[i]) === 'object')) {
+								var colorClass = "green";
+							} else {
+								var colorClass = "yellow";
+							}
+							elementStr = getArrayStr(element.concat(key));
+							if (Array.isArray(list1[i]) && !list1[i].length && Array.isArray(list2[i]) && !list2[i].length) {
+								htmlCode += "<div class='" + colorClass + "'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>[]</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>[]</p></div></div>";
+							} else if (typeof(list1[i]) === 'object' && list1[i] !== null && !Object.keys(list1[i]).length && typeof(list2[i]) === 'object' && list2[i] !== null && !Object.keys(list2[i]).length) {
+								htmlCode += "<div class='" + colorClass + "'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>{}</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>{}</p></div></div>";
+							} else {
+								htmlCode += "<div class='" + colorClass + "'><div class='left'><p style='margin-left:" + indent + "px;'>" + str(list1[i]) + "</p></div><div class='right'><p style='margin-left:" + indent + "px;'>" + str(list2[i]) + "</p></div></div>";
+							}
+						}
+					}
+				}
+				htmlCode += "<div class='green'><div class='left'><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>]</p></div><div class='right'><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>]</p></div></div>";
+			}
+			return htmlCode;
+		}
+		
+		// Recursively return HTML code for this object. 'element' is an array of keys in each JSON that holds the index to this specific object in the JSONs
+		function objHtml(json1, json2, element, indent=INDENTATION) {
+			var htmlCode;
+			if (JSON.stringify(json1) === JSON.stringify(json2)) {
+				htmlCode = "<div class='green'><div class='left'>" + getHtmlCode(json1, indent, element, "j1") + "</div><div class='right'>" + getHtmlCode(json2, indent, element, "j2") + "</div></div>";
+			} else {
+				var elementStr = getArrayStr(element);
+				if (!element.length || isPosInt(element[element.length - 1])) {
+					htmlCode = "<div class='green'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>{</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>{</p></div></div>";
+				} else {
+					htmlCode = "<div class='green'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": {</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>" + str(element[element.length - 1]) + ": {</p></div></div>";
+				}
+				var keys = [...new Set([...Object.keys(json1),...Object.keys(json2)])];
+				for (var key of keys) {
+					if (!Object.keys(json1).includes(key)) {
+						htmlCode += "<div class='red'><div class='left'></div><div class='right'>";
+						htmlCode += getHtmlCode(json2[key], indent + INDENTATION, element.concat(key), "j2");
+						htmlCode += "</div></div>";
+					} else if (!Object.keys(json2).includes(key)) {
+						htmlCode += "<div class='red'><div class='left'>";
+						htmlCode += getHtmlCode(json1[key], indent + INDENTATION, element.concat(key), "j1");
+						htmlCode += "</div><div class='right'></div></div>";
+					} else {
+						if (Array.isArray(json1[key]) && Array.isArray(json2[key]) && (json1[key].length || json2[key].length)) {
+							htmlCode += listHtml(json1[key], json2[key], element.concat(key), indent + INDENTATION);
+						} else if (typeof(json1[key]) === "object" && json1[key] !== null && typeof(json2[key]) === "object" && json2[key] !== null && (Object.keys(json1[key]).length || Object.keys(json2[key]).length)) {
+							htmlCode += objHtml(json1[key], json2[key], element.concat(key), indent + INDENTATION);
+						} else {
+							if (json1[key] === json2[key] || (typeof(json1[key]) === 'object' && typeof(json2[key]) === 'object')) {
+								var colorClass = "green";
+							} else {
+								var colorClass = "yellow";
+							}
+							elementStr = getArrayStr(element.concat(key));
+							if (Array.isArray(json1[key]) && !json1[key].length && Array.isArray(json2[key]) && !json2[key].length) {
+								htmlCode += "<div class='" + colorClass + "'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>" + str(key) + ": []</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>" + str(key) + ": []</p></div></div>";
+							} else if (typeof(json1[key]) === 'object' && json1[key] !== null && !Object.keys(json1[key]).length && typeof(json2[key]) === 'object' && json2[key] !== null && !Object.keys(json2[key]).length) {
+								htmlCode += "<div class='" + colorClass + "'><div class='left'><button class='remove' onclick='removeElement(j1," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>" + str(key) + ": {}</p></div><div class='right'><button class='remove' onclick='removeElement(j2," + elementStr + ");compareJsons();'><p>x</p></button><p style='margin-left:" + indent + "px;'>" + str(key) + ": {}</p></div></div>";
+							} else {
+								htmlCode += "<div class='" + colorClass + "'><div class='left'><p style='margin-left:" + indent + "px;'>" + str(key) + ": " + str(json1[key]) + "</p></div><div class='right'><p style='margin-left:" + indent + "px;'>" + str(key) + ": " + str(json2[key]) + "</p></div></div>";
+							}
+						}
+					}
+				}
+				htmlCode += "<div class='green'><div class='left'><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>}</p></div><div class='right'><p style='margin-left:" + Math.max(0, indent - INDENTATION) + "px;'>}</p></div></div>";
+			}
+			return htmlCode;
+		}
+		
+		// Get string representing the array
+		function getArrayStr(array) {
+			if (!array.length) {
+				return "[]";
+			} else {
+				var arrayStr = "[";
+				for (e of array) {
+					if (arrayStr !== "[") {
+						arrayStr += ",";
+					}
+					if (typeof(e) === 'string') {
+						arrayStr += '"' + e + '"';
+					} else {
+						arrayStr += e;
+					}
+				}
+				arrayStr += "]";
+				return arrayStr;
+			}
+		}
+		
+		// Get every key present in an object recursively
+		function getKeys(obj) {
+			var keySet = new Set();
+			for (key in obj) {
+				// Prevent numbers from being added as keys
+				if (!Array.isArray(obj)) {
+					keySet.add(key);
+				}
+				if (typeof(obj[key]) === "object" && obj[key] !== null) {
+					keySet = new Set([...keySet, ...getKeys(obj[key])]);
+				}
+			}
+			return keySet;
+		}
+		
+		// Remove object/array from json
+		function removeElement(obj, element) {
+			if (Array.isArray(obj) && !element.length) {
+				obj.length = 0;
+			} else if (typeof(obj) === 'object' && obj !== null && !element.length) {
+				for (var prop in obj) {
+					delete obj[prop];
+				}
+			} else {
+				var tmp = obj;
+				for (var idx = 0; idx < element.length - 1; ++idx) {
+					tmp = tmp[element[idx]];
+				}
+				if (Array.isArray(tmp) && isPosInt(element[element.length - 1])) {
+					tmp.splice(element[element.length - 1], 1);
+				} else {
+					delete tmp[element[element.length - 1]];
+				}
+			}
+		}
+		
+		// Remove key recursively from object
+		function removeKey(obj, key) {
+			if (typeof(obj) === "string") {
+				switch (obj) {
+					case "j1":
+						obj = j1;
+						break;
+					case "j2":
+						obj = j2;
+						break;
+					default:
+						console.log("Can't give '" + obj + "' as a string to 'removeKey()'!");
+				}
+			}
+			for (prop in obj) {
+				if (prop === key) {
+					delete obj[prop];
+				} else if (typeof(obj[prop]) === "object" && obj[prop] !== null) {
+					removeKey(obj[prop], key);
+				}
+			}
+		}
+		
+		// Returns if variable is a positive integer
+		function isPosInt(variable) {
+			if (typeof(variable) === "string") {
+				if (isNaN(variable)) {
+					return false;
+				} else {
+					variable = Number(variable);
+				}
+			}
+			return (Number.isInteger(variable) ** variable >= 0);
+		}
+		
+		// Gives the string representation of the given variable
+		function str(variable) {
+			if (typeof(variable) === "string") {
+				return '"' + variable + '"';
+			} else {
+				return String(variable);
+			}
+		}
+		
+		// Compares j2 against j1
+		function compareJsons() {
+			// Get unique keys from each JSON
+			var json1Keys = Array.from(getKeys(j1)).sort();
+			var json2Keys = Array.from(getKeys(j2)).sort();
+			
+			//Populate "Keys" divs with keys
+			var json1KeyCode = "";
+			for (key of json1Keys) {
+				json1KeyCode += "<button class='key' onclick=\"removeKey('j1','" + key + "');compareJsons();\"><p>" + key + "</p></button>";
+			}
+			document.getElementById("j1Keys").innerHTML = json1KeyCode;
+			var json2KeyCode = "";
+			for (key of json2Keys) {
+				json2KeyCode += "<button class='key' onclick=\"removeKey('j2','" + key + "');compareJsons();\"><p>" + key + "</p></button>";
+			}
+			document.getElementById("j2Keys").innerHTML = json2KeyCode;
+			
+			// Display all "Key" elements
+			document.getElementById("j1Keys").style.display = "block";
+			document.getElementById("j1KeysTitle").style.display = "block";
+			document.getElementById("j2Keys").style.display = "block";
+			document.getElementById("j2KeysTitle").style.display = "block";
+			
+			// Show graphical comparison of JSON objects
+			document.getElementById("comparison").innerHTML = objHtml(j1, j2, []);
+		}
+		
+		// Load the selected files
+		function loadFiles(firstPress) {
+			if (firstPress) {
+				file1 = document.getElementById("file1").files;
+				file2 = document.getElementById("file2").files;
+				
+				if (file1.length <= 0 || file2.length <= 0) {
+					document.getElementById("overallResponse").innerHTML = "You can't compare empty files!";
+					return;
+				}
+				
+				fr1.readAsText(file1[0]);
+				fr2.readAsText(file2[0]);
+				loadFiles(false);
+			} else if (fr1.readyState === 2 && fr2.readyState === 2) {
+				j1 = JSON.parse(fr1.result);
+				j2 = JSON.parse(fr2.result);
+				compareJsons();
+			} else {
+				setTimeout(loadFiles, 100, false);
+			}
+		}
+	</script>
+</head>
+<body>
+	<div id="header">
+		<h1>The Ultimate Packet Comparer</h1>
+		<h3>For HAR and JSON files</h3>
+		<button id="loadFiles" onclick="loadFiles(true)">Load Files</button>
+		<h3 id="overallResponse"></h3>
+	</div>
+	<div id="comparisonSettings">
+		<div id="leftButton">
+			<input type="file" id="file1" value="file1">
+			<h3 id="j1KeysTitle">JSON Keys</h3>
+			<div id="j1Keys">
+			</div>
+		</div>
+		<div id="rightButton">
+			<input type="file" id="file2" value="file2">
+			<h3 id="j2KeysTitle">JSON Keys</h3>
+			<div id="j2Keys">
+			</div>
+		</div>
+	</div>
+	<div id="comparison"></div>
+</body>
+</html>
